@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 # MLP layers
-class DNN(nn.module):
+class DNN(nn.Module):
     def __init__(self, inputs_dim, hidden_units, activation=F.relu, l2_reg=0,
                  dropout_rate=0, use_bn=False, init_std=0.0001,seed=1024):
         super(DNN, self).__init__()
@@ -37,7 +37,7 @@ class DNN(nn.module):
         return deep_input
 
 
-class PredictionLayer(nn.module):
+class PredictionLayer(nn.Module):
     def __init__(self, task='binary', use_bias=True, **kwargs):
         if task not in ["binary", "multiclass", "regression"]:
             raise ValueError("task must be binary, multiclass or regression")

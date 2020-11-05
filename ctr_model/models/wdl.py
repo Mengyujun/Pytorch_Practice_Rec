@@ -1,9 +1,9 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from itertools import chain
 
 from .basemodel import BaseModel
-from ..layers import DNN
+from ctr_model.inputs import combined_dnn_input
+from ctr_model.layers import DNN
 
 class WDL(BaseModel):
     def __init__(self,
@@ -24,4 +24,22 @@ class WDL(BaseModel):
         self.to(device)
 
     def forward(self, X):
-        pass
+
+        sparse_embedding_list, dense_valuse_list = self.input_from_feature_columns(X, self.dnn_feature_columns,
+                                                                                   self.embedding_dict)
+
+        # linear part
+        linear_logit =  self.linear_model(X)
+
+        # dnn part
+        dnn_input = combined_dnn_input(sparse_embedding_list, dense_valuse_list)
+        dnn_output = self.dnn(dnn_input)
+        dnn_logit = self.dnn_linear(dnn_output)
+
+        logit = linear_logit + dnn_logit
+
+        y_pred = self.out(logit)
+
+        return y_pred
+
+
