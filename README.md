@@ -10,4 +10,4 @@
 
 
 ## 论文笔记
-可以参考 [Rec—Notes](https://github.com/Mengyujun/Rec-Notes), 其中包含机器学习, 深度学习以及推荐系统方向的个人总结
+可以参考 [Rec-Notes](https://github.com/Mengyujun/Rec-Notes), 其中包含机器学习, 深度学习以及推荐系统方向的个人总结
