@@ -19,7 +19,7 @@ class DNN(nn.Module):
         self.linears = nn.ModuleList(
             [nn.Linear(hidden_units[i], hidden_units[i+1]) for i in range(len(hidden_units)-1)])
         for tensor in self.linears:
-            nn.init.normal_(tensor.weight, mean=0, init_std=init_std)
+            nn.init.normal_(tensor.weight, mean=0, std=init_std)
 
 
     def forward(self, inputs):

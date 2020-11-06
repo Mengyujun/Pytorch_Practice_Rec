@@ -7,18 +7,15 @@ from .layers.utils import concat_fun
 
 DEFAULT_GROUP_NAME = "default_group"
 
-class SparseFeat(namedtuple("SparseFeat", ['name', 'vocabulary_size', 'embedding_dim', 'dtype',
-                                           'embedding_name', 'group_name'])):
+class SparseFeat(namedtuple("SparseFeat", ['name', 'dimension', 'use_hash', 'dtype','embedding_name','embedding'])):
     __slots__ = ()
 
-    def __new__(cls, name, vocabulary_size, embedding_dim=4, dtype="int32", embedding_name=None,
-                ground_name=DEFAULT_GROUP_NAME):
+    def __new__(cls, name, dimension, use_hash=False, dtype="int32", embedding_name=None, embedding=True):
         if embedding_name == None:
             embedding_name = name
-        if embedding_dim == 'auto':
-            embedding_dim = 6 * int(pow(vocabulary_size, 0.25))
-        return  super(SparseFeat, cls).__new__(cls, name, vocabulary_size, embedding_dim, dtype, embedding_name,
-                                               ground_name)
+        # if embedding_dim == 'auto':
+        #     embedding_dim = 6 * int(pow(vocabulary_size, 0.25))
+        return  super(SparseFeat, cls).__new__(cls, name, dimension, use_hash, dtype, embedding_name, embedding)
 
 
 class DenseFeat(namedtuple("DenseFeat", ['name', 'dimension', 'dtype'])):
@@ -43,7 +40,7 @@ def combined_dnn_input(sparse_embedding_list, dense_value_list):
     else:
         raise NotImplementedError
 
-def get_fixlen_feature_names(feature_columns):
+def get_feature_names(feature_columns):
     feature_dict = build_input_features(feature_columns)
     return list(feature_dict.keys())
 

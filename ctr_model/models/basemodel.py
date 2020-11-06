@@ -1,8 +1,16 @@
+import numpy as np
+import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.utils.data as Data
+from sklearn.metrics import log_loss, roc_auc_score
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from ctr_model.inputs import SparseFeat, DenseFeat
+from ctr_model.inputs import SparseFeat, DenseFeat, build_input_features
 from ctr_model.layers import PredictionLayer
+from ctr_model.layers.utils import slice_arrays
 
 
 class Linear(nn.Module):
@@ -22,8 +30,8 @@ class Linear(nn.Module):
             nn.init.normal_(tensor.weight, mean=0, std=init_std)
         
         if len(self.dense_feature_columns) > 0:
-            self.weight = nn.Parameter(torch.tensor(len(self.dense_feature_columns), 1))
-            nn.init.normal(self.weight, mean=0, std=init_std)
+            self.weight = nn.Parameter(torch.Tensor(len(self.dense_feature_columns), 1))
+            nn.init.normal_(self.weight, mean=0, std=init_std)
 
 
     def forward(self, X):
@@ -52,7 +60,7 @@ class Linear(nn.Module):
             filter(lambda x: isinstance(x, SparseFeat), feature_columns)) if len(feature_columns) else []
 
         embedding_dict = nn.ModuleDict(
-            {feat.embedding_name: nn.Embedding(feat.dimension, embedding_size, sparse=sparse) for feat in
+            {feat.embedding_name: nn.Embedding(feat.dimension.size, embedding_size, sparse=sparse) for feat in
             sparse_feature_columns})
 
         for tensor in embedding_dict.values():
@@ -87,14 +95,140 @@ class BaseModel(nn.Module):
         self.out = PredictionLayer(task, )
         self.to(device)
 
-    def fit(self):
-        pass
+    def fit(self, x=None,
+            y=None,
+            batch_size=None,
+            epochs=1,
+            verbose=1,
+            callbacks=None,
+            initial_epoch=0,
+            validation_split=0.,
+            validation_data=None,
+            shuffle=True, ):
+        if validation_data:
 
-    def evaluate(self):
-        pass
+            if len(validation_data) == 2:
+                val_x, val_y = validation_data
+                val_sample_weight = None
+            elif len(validation_data) == 3:
+                val_x, val_y, val_sample_weight = validation_data  # pylint: disable=unpacking-non-sequence
+            else:
+                raise ValueError(
+                    'When passing a `validation_data` argument, '
+                    'it must contain either 2 items (x_val, y_val), '
+                    'or 3 items (x_val, y_val, val_sample_weights), '
+                    'or alternatively it could be a dataset or a '
+                    'dataset or a dataset iterator. '
+                    'However we received `validation_data=%s`' % validation_data)
 
-    def predict(self):
-        pass
+        elif validation_split and 0. < validation_split < 1.:
+            if hasattr(x[0], 'shape'):
+                split_at = int(x[0].shape[0] * (1. - validation_split))
+            else:
+                split_at = int(len(x[0]) * (1. - validation_split))
+            x, val_x = (slice_arrays(x, 0, split_at), slice_arrays(x, split_at))
+            y, val_y = (slice_arrays(y, 0, split_at), slice_arrays(y, split_at))
+
+        else:
+            val_x = None,
+            val_y = None
+
+        # train_tensor_data = Data.TensorDataset(
+        #     torch.from_numpy(np.hstack(list(map(lambda x: np.expand_dims(x, axis=1), x)))),
+        #     torch.from_numpy(np.array(y))
+        # )
+        #
+        # train_loader = DataLoader(dataset=train_tensor_data, shuffle=shuffle, batch_size=batch_size)
+
+
+        train_tensor_data = Data.TensorDataset(
+            torch.from_numpy(np.hstack(list(map(lambda x: np.expand_dims(x, axis=1), x)))),
+            torch.from_numpy(y))
+
+        train_loader = DataLoader(dataset=train_tensor_data, shuffle=shuffle, batch_size=batch_size)
+
+        print(self.device,end="\n")
+        model = self.train()
+        loss_func = self.loss_func
+        optim = self.optim
+        print("Train on {0} samples, validate on {1} samples".format(len(train_tensor_data), len(val_y)))
+        for epoch in range(initial_epoch, epochs):
+            start_time = time.time()
+            loss_epoch = 0
+            total_loss_epoch = 0
+            # if abs(loss_last - loss_now) < 0.0
+            sample_num = len(train_tensor_data)
+            train_result = {}
+            steps_per_epoch = (sample_num - 1) // batch_size + 1
+            try:
+                with tqdm(enumerate(train_loader), disable=verbose != 1) as t:
+                    for index, (x_train, y_train) in t:
+                        x = x_train.to(self.device).float()
+                        y = y_train.to(self.device).float()
+
+                        y_pred = model(x).squeeze()
+
+                        optim.zero_grad()
+
+                        loss = loss_func(y_pred, y.squeeze(), reduction='sum')
+
+                        total_loss = loss + self.reg_loss
+                        loss_epoch += loss.item()
+                        total_loss_epoch += total_loss.item()
+                        total_loss.backward(retain_graph=True)
+
+                        optim.step()
+
+                        if verbose > 0:
+                            for name, metric_fun in self.metrics.items():
+                                if name not in train_result:
+                                    train_result[name] = []
+                                train_result[name].append(metric_fun(y.cpu().data.numpy(), y_pred.cpu().data.numpy()))
+
+
+            except KeyboardInterrupt:
+                t.close()
+                raise
+            t.close()
+
+            epoch_time = int(time.time() - start_time)
+            if verbose > 0:
+                print('Epoch {0}/{1}'.format(epoch + 1, epochs))
+
+                eval_str = "{0}s - loss: {1: .4f}".format(epoch_time, total_loss_epoch / sample_num)
+
+                for name, result in train_result.items():
+                    eval_str += " - " + name + ": {0: .4f}".format(np.sum(result)/steps_per_epoch)
+
+
+                if val_x is not None and val_y is not None:
+                    eval_result = self.evaluate(val_x, val_y, batch_size)
+
+                    for name, result in eval_result.items():
+                        eval_str += " - val_" + name + ": {0: .4f}".format(result)
+                print(eval_str)
+
+    def evaluate(self, x, y, batch_size):
+        pred_ans = self.predict(x, batch_size)
+        eval_result = {}
+        for name, metric_fun in self.metrics.items():
+            eval_result[name] = metric_fun(y, pred_ans)
+        return eval_result
+
+    def predict(self, x, batch_size=256):
+        model = self.eval()
+        x = np.hstack(list(map(lambda x: np.expand_dims(x, axis=1), x)))
+        tensor_data = Data.TensorDataset(torch.from_numpy(x))
+        test_loader = DataLoader(tensor_data, shuffle=False, batch_size=batch_size)
+
+        pred_ans = []
+        with torch.no_grad():
+            for index, x_test in enumerate(test_loader):
+                x = x_test[0].to(self.device).float()
+
+                y_yield = model(x).cpu().data.numpy()
+                pred_ans.append(y_yield)
+        return np.concatenate(pred_ans)
 
     def input_from_feature_columns(self, X, feature_columns, embedding_dict):
         sparse_feature_columns = list(
@@ -112,7 +246,7 @@ class BaseModel(nn.Module):
         return sparse_embedding_list, dense_value_list
 
     def add_regularization_loss(self, weight_list, weight_deecay, p=2):
-        reg_loss = torch.zeros((1,), device=device)
+        reg_loss = torch.zeros((1,), device=self.device)
         for w in weight_list:
             l2_reg = torch.norm(w, p=p, )
             reg_loss += l2_reg
@@ -124,11 +258,13 @@ class BaseModel(nn.Module):
             filter(lambda x: isinstance(x, SparseFeat), feature_columns)) if len(feature_columns) else []
 
         embedding_dict = nn.ModuleDict(
-            {feat.embedding_name: nn.Embedding(feat.dimension, embedding_size, sparse=sparse) for feat in
+            {feat.embedding_name: nn.Embedding(feat.dimension.size, embedding_size, sparse=sparse) for feat in
              sparse_feature_columns}
         )
         for tensor in embedding_dict.values():
             nn.init.normal_(tensor.weight, mean=0, std=init_std)
+
+        return embedding_dict
 
 
     def compute_input_dim(self, feature_columns, embedding_size, dense_only=False):
@@ -141,3 +277,38 @@ class BaseModel(nn.Module):
             return sum(map(lambda x:x.dimension, dense_feature_columns))
         else :
             return len(sparse_feature_columns) * embedding_size + sum(map(lambda x:x.dimension, dense_feature_columns))
+
+    def compile(self, optimizer, loss=None, metrics=None, loss_weights=None, sample_weight_mode=None):
+        self.optim = self._get_optim(optimizer)
+        self.loss_func = self._get_loss_func(loss)
+        self.metrics = self._get_metrics(metrics)
+
+    def _get_optim(self, optimizer):
+        if isinstance(optimizer, str):
+            if optimizer == "sgd":
+                optim = torch.optim.SGD(self.parameters(), lr=0.01)
+            elif optimizer == "adam":
+                optim = torch.optim.Adam(self.parameters())
+            elif optimizer == "adagrad":
+                optim = torch.optim.Adagrad(self.parameters())
+            elif optimizer == "rmsprop":
+                optim = torch.optim.RMSprop(self.parameters())
+            else:
+                raise NotImplementedError
+        else:
+            optim = optimizer
+
+        return optim
+
+    def _get_loss_func(self, loss):
+        pass
+
+    def _get_metrics(self, metrics):
+        metrics_ = {}
+        if metrics:
+            for metric in metrics:
+                if metric == "binary_crossentropy" or metric == "logloss":
+                    metrics_[metric] = log_loss
+                if metric == "auc":
+                    metrics_[metric] = roc_auc_score
+        return metrics_
