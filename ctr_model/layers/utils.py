@@ -31,7 +31,7 @@ def slice_arrays(arrays, start=None, stop=None):
         return [None]
 
     if isinstance(arrays, np.ndarray):
-        array = [arrays]
+        arrays = [arrays]
 
     if isinstance(start, list) and stop is not None:
         raise ValueError('The stop argument has to be None if the value of start '

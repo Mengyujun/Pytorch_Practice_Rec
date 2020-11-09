@@ -52,7 +52,7 @@ if __name__ == "__main__":
                 l2_reg_embedding=1e-5,l2_reg_linear=1e-5,l2_reg_dnn=0,device=device)
 
     model.compile("adagrad", "binary_crossentropy", metrics=["binary_crossentropy", "auc"], )
-    model.fit(train_model_input, data[target].values, batch_size=256, epochs=10, validation_split=0.2, verbose=2)
+    model.fit(train_model_input, train[target].values, batch_size=256, epochs=10, validation_split=0.2, verbose=2)
 
     pred_ans = model.predict(test_model_input, 256)
 
