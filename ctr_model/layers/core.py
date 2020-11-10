@@ -25,7 +25,7 @@ class DNN(nn.Module):
     def forward(self, inputs):
         deep_input = inputs
 
-        for i in range(self.linears):
+        for i in range(len(self.linears)):
             fc = self.linears[i](deep_input)
 
             fc = self.activation(fc)

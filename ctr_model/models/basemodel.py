@@ -73,7 +73,7 @@ class BaseModel(nn.Module):
     def __init__(self, 
                  linear_feature_columns, dnn_feature_columns, embedding_size=8, dnn_hidden_units=(128, 128), 
                  l2_reg_linear=1e-5,
-                 l2_reg_embedding=1e-5, l2_reg_dnn=0, init_std=0.0001, seed=1024, dnn_dropout=0, dnn_activation='relu',
+                 l2_reg_embedding=1e-5, l2_reg_dnn=0, init_std=0.0001, seed=1024, dnn_dropout=0, dnn_activation=F.relu,
                  task='binary', device='cpu'):
         super(BaseModel, self).__init__()
         
@@ -89,8 +89,9 @@ class BaseModel(nn.Module):
         self.linear_model = Linear(linear_feature_columns, self.feature_index, device=device)
 
         # add regularization loss
-        self.add_regularization_loss(self.embedding_dict.parameters(), l2_reg_embedding)
-        self.add_regularization_loss(self.linear_model.parameters(), l2_reg_linear)
+        # change to -> model.fit()
+        # self.add_regularization_loss(self.embedding_dict.parameters(), l2_reg_embedding)
+        # self.add_regularization_loss(self.linear_model.parameters(), l2_reg_linear)
 
         self.out = PredictionLayer(task, )
         self.to(device)
@@ -172,10 +173,14 @@ class BaseModel(nn.Module):
 
                         loss = loss_func(y_pred, y.squeeze(), reduction='sum')
 
+                        # add regularization loss
+                        self.add_regularization_loss(self.embedding_dict.parameters(), self.l2_reg_embedding)
+                        self.add_regularization_loss(self.linear_model.parameters(), self.l2_reg_linear)
+
                         total_loss = loss + self.reg_loss
                         loss_epoch += loss.item()
                         total_loss_epoch += total_loss.item()
-                        total_loss.backward(retain_graph=True)
+                        total_loss.backward(retain_graph=False)
 
                         optim.step()
 
@@ -251,7 +256,9 @@ class BaseModel(nn.Module):
             l2_reg = torch.norm(w, p=p, )
             reg_loss += l2_reg
         reg_loss = weight_deecay * reg_loss
-        self.reg_loss += reg_loss
+        # self.reg_loss += reg_loss
+        # change reg_less
+        self.reg_loss = reg_loss
 
     def create_embedding_matrix(self, feature_columns, embedding_size, init_std=0.0001, sparse=False):
         sparse_feature_columns = list(
@@ -301,7 +308,18 @@ class BaseModel(nn.Module):
         return optim
 
     def _get_loss_func(self, loss):
-        pass
+        if isinstance(loss, str):
+            if loss == "binary_crossentropy":
+                loss_func = F.binary_cross_entropy
+            elif loss == "mse":
+                loss_func = F.mse_loss
+            elif loss == "mae":
+                loss_func = F.l1_loss
+            else:
+                raise NotImplementedError
+        else:
+            loss_func = loss
+        return loss_func
 
     def _get_metrics(self, metrics):
         metrics_ = {}
