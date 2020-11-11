@@ -88,6 +88,9 @@ class BaseModel(nn.Module):
 
         self.linear_model = Linear(linear_feature_columns, self.feature_index, device=device)
 
+        self.l2_reg_embedding = l2_reg_embedding
+        self.l2_reg_linear = l2_reg_linear
+
         # add regularization loss
         # change to -> model.fit()
         # self.add_regularization_loss(self.embedding_dict.parameters(), l2_reg_embedding)
