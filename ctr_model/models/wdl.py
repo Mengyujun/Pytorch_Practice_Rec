@@ -21,7 +21,7 @@ class WDL(BaseModel):
         self.dnn = DNN(self.compute_input_dim(dnn_feature_columns, embedding_size, ), dnn_hidden_units,
                        activation=dnn_activation, l2_reg=l2_reg_dnn,dropout_rate=dnn_dropout, init_std=init_std)
         self.dnn_linear = nn.Linear(dnn_hidden_units[-1], 1, bias=False)
-        self.add_regularization_loss(chain(self.dnn.parameters(), self.dnn_linear.parameters()), l2_reg_dnn)
+        # self.add_regularization_loss(chain(self.dnn.parameters(), self.dnn_linear.parameters()), l2_reg_dnn)
         self.to(device)
 
     def forward(self, X):

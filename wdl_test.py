@@ -9,7 +9,7 @@ from ctr_model.inputs import SparseFeat, DenseFeat, get_feature_names
 import torch
 
 if __name__ == "__main__":
-    data = pd.read_csv('../dataset/criteo_sample.txt')
+    data = pd.read_csv('dataset/criteo_sample.txt')
 
     sparse_features = ['C'+ str(i) for i in range(1, 27)]
     dense_features = ['I'+ str(i) for i in range(1, 14)]
