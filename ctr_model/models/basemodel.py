@@ -144,7 +144,6 @@ class BaseModel(nn.Module):
         #
         # train_loader = DataLoader(dataset=train_tensor_data, shuffle=shuffle, batch_size=batch_size)
 
-
         train_tensor_data = Data.TensorDataset(
             torch.from_numpy(np.hstack(list(map(lambda x: np.expand_dims(x, axis=1), x)))),
             torch.from_numpy(y))

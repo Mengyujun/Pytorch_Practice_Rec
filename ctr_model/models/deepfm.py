@@ -44,6 +44,7 @@ class DeepFM(BaseModel):
         if len(sparse_embedding_list) > 0 :
             fm_input = torch.cat(sparse_embedding_list, dim = 1)
             fm_output = self.fm(fm_input)
+            #print('fm_output: ', fm_output)
         else:
             fm_output = 0
 
